@@ -117,20 +117,18 @@ invite  -> NONE
 ## 7. Permit 设计
 
 统一入口：
-
+- resource(teant, knowledgebase, document)
 ```python
 Permit.check(user, resource, action)
 
   check(user, resource, action)
-  		if superuser return true;
-  		
-  		if user_id in user_tenant 
+  		if superuser return true; 
   			
   		if isinstance(resource, kb)
-  			return check(user, resource, action)
+  			return _check_kb(user, resource, action)
   
   		if isinstance(resource, document)
-  			return check(user, resource.kb, action)
+  			return _check_kb(user, resource.kb, action)
 
   		@default
   		return false
@@ -171,15 +169,13 @@ _check_kb(user, kb, action):
         return True
 
     for parent in get_parent(kb.tenant_id):
-        if not parent.inherit_access:
-            continue
         role = get_role(user, parent.id)
         if role and role_allows(role, action):
             return True
 
     return False
 
-# 核心逻辑去寻找等级关系
+# 核心逻辑去寻找关系，权限仅向上继承，不向下继承
 get_parent(tenant_id):
   parents = []
   current = Tenant.get(tenant_id) —> get all the tenants with this tenant_id (only 1)
@@ -191,6 +187,13 @@ get_parent(tenant_id):
     current = parent
   return ancestors
 ```
+- pyhton层面的while loop --> 性能问题
+- while-loop可以在SQL里面跑 就不需要在python层面跑（解决方案）
+
+优化方案：
+- 使用 Recursive CTE 在数据库中一次性查询 tenant ancestors
+- 返回 user 在当前 tenant 及所有 ancestor tenant 的 role 列表
+- Python 层仅做 role_allows 判断
 
 ---
 
@@ -201,3 +204,87 @@ get_parent(tenant_id):
 - Document 权限继承 KB
 - 单一 Permit.check 入口
 - database 增加和删除逻辑也需要修改
+
+### 11.1 登录工作流
+```
+用户登录  
+    │
+    ▼
+身份认证 (Auth Service)  
+    │
+    ▼
+获取用户信息 (`useFetchUserInfo`)  
+    ├─ user_id  
+    ├─ is_superuser  
+    └─ 基本信息  
+```
+
+---
+
+### 11.2 获取用户加入的团队（Tenant 列表）
+```
+获取团队列表 (`useListTenant`)  
+    │
+    ▼
+查询 `user_tenant` 表  
+    │
+    └─ 返回用户加入的所有 Tenant 信息  
+        ├─ tenant_id  
+        ├─ tenant_name  
+        ├─ tenant_type  
+        ├─ user_role  
+        └─ joined_at  
+```
+
+---
+
+### 11.3 切换当前工作空间（Tenant）
+```
+用户选择 Tenant  
+    │
+    ▼
+获取当前工作空间信息 (`useFetchTenantInfo`)  
+    ├─ tenant_id  
+    ├─ tenant_type  
+    ├─ parent_id  
+    └─ 配置信息  
+
+同时加载团队成员列表 (`useListTenantUser`)  
+    │
+    ▼
+查询 `user_tenant` 表  
+    │
+    └─ 返回成员列表  
+        ├─ user_id  
+        ├─ role (owner/admin/normal/invite)  
+        └─ 操作权限  
+```
+
+---
+
+### 11.4 用户操作 Document（继承 KB 权限）
+```
+用户对 Document 执行操作（CREATE / READ / UPDATE / DELETE）  
+    │
+    ▼
+调用 `Permit.check(user, document, action)`  
+    │
+    ▼
+系统自动转为 KB 鉴权： `_check_kb(user, document.kb, action)`  
+    │
+    ├─ **True** → 执行操作  
+    └─ **False** → 返回无权限  
+```
+
+
+---
+
+### 11.5 权限检查统一路径
+```
+任何用户操作 → `Permit.check(user, resource, action)`  
+    │
+    ├─ **superuser** → True  
+    ├─ **Document** → 转为 KB 鉴权  
+    ├─ **KnowledgeBase** → Tenant ReBAC 鉴权  
+    └─ **默认** → False
+```
