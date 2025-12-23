@@ -200,3 +200,4 @@ get_parent(tenant_id):
 - Tenant 表存 parent
 - Document 权限继承 KB
 - 单一 Permit.check 入口
+- database 增加和删除逻辑也需要修改
