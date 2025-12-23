@@ -1,5 +1,26 @@
 # ReBAC Permission Design
 
+## 目录
+1. [权限模型说明](#权限模型说明)
+2. [核心关系模型](#核心关系模型)
+3. [数据库表结构](#数据库表结构)
+   1. [user_tenant（用户属于哪个 Tenant）](#usertenant用户属于哪个-tenant)
+   2. [tenant（租户 / 工作区）](#tenant租户--工作区)
+   3. [document](#document)
+4. [权限继承策略](#权限继承策略)
+5. [Action 定义](#action-定义)
+6. [Role 权限映射](#role-权限映射)
+7. [Permit 设计](#permit-设计)
+8. [Tenant 继承逻辑](#tenant-继承逻辑)
+9. [核心 KB 鉴权逻辑](#核心-kb-鉴权逻辑)
+10. [总结](#总结)
+11. [操作流程](#操作流程)
+    1. [登录工作流](#登录工作流)
+    2. [获取用户加入的团队（Tenant 列表）](#获取用户加入的团队tenant-列表)
+    3. [切换当前工作空间（Tenant）](#切换当前工作空间tenant)
+    4. [用户操作 Document（继承 KB 权限）](#用户操作-document继承-kb-权限)
+    5. [权限检查统一路径](#权限检查统一路径)
+---
 ## 1. 权限模型说明
 
 当前方案采用 **Relationship Based Access Control（ReBAC）**  
